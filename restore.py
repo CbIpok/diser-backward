@@ -4,6 +4,36 @@ import numpy as np
 import parsers
 
 
+def gram_schmidt(vectors):
+    """Ортогонализируем набор векторов с помощью процесса Грама-Шмидта"""
+    orthogonal_vectors = []
+    for v in vectors:
+        w = v - sum(np.dot(v, u) / np.dot(u, u) * u for u in orthogonal_vectors)
+        orthogonal_vectors.append(w)
+    return np.array(orthogonal_vectors)
+
+
+def project_onto_basis(v, basis):
+    """Проецируем вектор на базис"""
+    return np.array([np.dot(v, b) / np.dot(b, b) for b in basis])
+
+
+def decompose_vector(v, non_orthogonal_basis):
+    """Разлагаем вектор по неортогональному базису"""
+    # Ортогонализируем базис
+    orthogonal_basis = gram_schmidt(non_orthogonal_basis)
+
+    # Находим коэффициенты в ортогональном базисе
+    coeffs_orthogonal = project_onto_basis(v, orthogonal_basis)
+
+    # Решаем систему линейных уравнений для нахождения исходных коэффициентов
+    try:
+        coeffs_original = np.linalg.solve(orthogonal_basis.T, coeffs_orthogonal)
+    except Exception:
+        return [0 for i in range(len(orthogonal_basis))]
+
+    return coeffs_original
+
 def normalized_similarity_percentage(set1, set2):
     # Проверка, что оба набора имеют одинаковую длину
     if len(set1) != len(set2):
@@ -42,12 +72,18 @@ def approximate_with_non_orthogonal_basis(vector, basis):
     approximation = np.dot(A, coefficients)
     return approximation, coefficients
 
+def approximate_with_non_orthogonal_basis_orto(vector, basis):
+    vector_copy = copy.deepcopy(vector)
+    basis_copy = copy.deepcopy(basis)
+    coofs = decompose_vector(vector_copy,basis_copy)
+    aprox = [coofs[i]*basis[i] for i in range(len(basis))]
+    return aprox, coofs
 
 def coof_evolution(mariogram, fk, mariogram_answer):
     # recovery_data = []
     res = []
     for t in range(len(mariogram)):
-        aprox, coof = approximate_with_non_orthogonal_basis(mariogram[:t + 1], [fki[:t + 1] for fki in fk])
+        aprox, coof = approximate_with_non_orthogonal_basis_orto(mariogram[:t + 1], [fki[:t + 1] for fki in fk])
         accuracy = sum(abs(mariogram[:t + 1] - aprox))
         res.append([accuracy, coof])
     # fig, ax1 = plt.subplots(1)
@@ -59,9 +95,12 @@ def coof_evolution(mariogram, fk, mariogram_answer):
 
 def coof_evolution_plot(mariogram, fk, mariogram_answer):
     acc, mariogram, coofs = coof_evolution(mariogram, fk, mariogram_answer)
-    fig, [ax1, ax2] = plt.subplots(2)
+    fig, [ax1, ax2, ax3] = plt.subplots(3)
     ax1.plot(mariogram)
     ax2.plot(acc)
+    transposed_data = list(zip(*coofs))
+    transposed_data = [list(item) for item in transposed_data]
+    [ax3.plot(np.clip(transposed_data[i], -10, max(*coofs[-1]))) for i in range(len(transposed_data))]
     plt.show()
 
 
@@ -85,8 +124,8 @@ def get_restore_time(wave_form_to_restore: parsers.WaveFormToRestore, pos, thres
     return find_stable_index(acc, threshold)
 
 
-
-# # evolution(parsers.WaveFormToRestore("quadro", "8_4_0_-4"), "700_800")
-# wave_form_to_restore = parsers.WaveFormToRestore("quadro", "8_4_0_-4")
-# pos = "700_800"
-# print(get_restore_time(wave_form_to_restore, pos, 95))
+if __name__ == "__main__":
+    evolution(parsers.WaveFormToRestore("octo", "1_2_4_8_16_32"), "700_1100")
+    # wave_form_to_restore = parsers.WaveFormToRestore("quadro", "8_4_0_-4")
+    # pos = "700_800"
+    # print(get_restore_time(wave_form_to_restore, pos, 95))

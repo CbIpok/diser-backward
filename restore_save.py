@@ -1,6 +1,8 @@
 import os
 from parsers import WaveFormToRestore
 import restore
+import json
+from tqdm import tqdm
 
 threshold = 95
 
@@ -43,6 +45,13 @@ def restore_all_times():
         restore_res[basis] = {}
         for experiment in experiment_dict[basis]:
             wave = WaveFormToRestore(basis, experiment)
-            times = [restore.get_restore_time(wave, f"{pos[0]}_{pos[1]}", threshold) for pos in wave.coords]
+            times = [restore.get_restore_time(wave, f"{pos[0]}_{pos[1]}", threshold) for pos in
+                     tqdm(wave.coords, desc=f"process basis {basis} experiment {experiment}")]
             restore_res[basis][experiment] = {"coords": wave.coords, "times": times}
-    
+    output_file = 'data/experiment_dictionary.json'
+    # Сохранение словаря в файл JSON
+    with open(output_file, 'w') as file:
+        json.dump(restore_res, file, indent=4)
+
+
+# restore_all_times()
