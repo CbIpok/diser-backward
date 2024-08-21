@@ -4,35 +4,33 @@ import numpy as np
 import parsers
 
 
-def gram_schmidt(vectors):
-    """Ортогонализируем набор векторов с помощью процесса Грама-Шмидта"""
-    orthogonal_vectors = []
-    for v in vectors:
-        w = v - sum(np.dot(v, u) / np.dot(u, u) * u for u in orthogonal_vectors)
-        orthogonal_vectors.append(w)
-    return np.array(orthogonal_vectors)
+def gram_schmidt_with_fixed_first_vector(vectors):
+    """Ортогонализация системы векторов методом Грама-Шмидта, фиксируя первый вектор."""
+    orthogonal_basis = [vectors[0].astype(float)]  # Первый вектор остаётся неизменным
+    for v in vectors[1:]:
+        v = v.astype(float)
+        for u in orthogonal_basis:
+            v -= np.dot(v, u) / np.dot(u, u) * u
+        orthogonal_basis.append(v)
+    return orthogonal_basis
 
 
-def project_onto_basis(v, basis):
-    """Проецируем вектор на базис"""
-    return np.array([np.dot(v, b) / np.dot(b, b) for b in basis])
+def decompose_vector(vector, basis):
+    """Находит коэффициенты разложения вектора по базису."""
+    coefficients = []
+    for b in basis:
+        coefficient = np.dot(vector, b) / np.dot(b, b)
+        coefficients.append(coefficient)
+    return np.array(coefficients)
 
 
-def decompose_vector(v, non_orthogonal_basis):
-    """Разлагаем вектор по неортогональному базису"""
-    # Ортогонализируем базис
-    orthogonal_basis = gram_schmidt(non_orthogonal_basis)
+def find_coefficients_in_original_basis(basis, orthogonal_basis, f_bort):
+    """Находит коэффициенты разложения вектора по исходному базису из ортогонализованного."""
+    # Решаем систему f_b * b = f_bort * bort
+    transition_matrix = np.array([[np.dot(ob, b) for ob in orthogonal_basis] for b in basis])
+    f_b = np.linalg.solve(transition_matrix.T, f_bort * np.array([np.dot(ob, ob) for ob in orthogonal_basis]))
+    return f_b
 
-    # Находим коэффициенты в ортогональном базисе
-    coeffs_orthogonal = project_onto_basis(v, orthogonal_basis)
-
-    # Решаем систему линейных уравнений для нахождения исходных коэффициентов
-    try:
-        coeffs_original = np.linalg.solve(orthogonal_basis.T, coeffs_orthogonal)
-    except Exception:
-        return [0 for i in range(len(orthogonal_basis))]
-
-    return coeffs_original
 
 def normalized_similarity_percentage(set1, set2):
     # Проверка, что оба набора имеют одинаковую длину
@@ -75,7 +73,12 @@ def approximate_with_non_orthogonal_basis(vector, basis):
 def approximate_with_non_orthogonal_basis_orto(vector, basis):
     vector_copy = copy.deepcopy(vector)
     basis_copy = copy.deepcopy(basis)
-    coofs = decompose_vector(vector_copy,basis_copy)
+    bort = gram_schmidt_with_fixed_first_vector(basis_copy)
+    f_bort = decompose_vector(vector_copy, bort)
+    try:
+        coofs = find_coefficients_in_original_basis(basis_copy, bort, f_bort)
+    except np.linalg.LinAlgError:
+        return None, None
     aprox = [coofs[i]*basis[i] for i in range(len(basis))]
     return aprox, coofs
 
@@ -84,7 +87,11 @@ def coof_evolution(mariogram, fk, mariogram_answer):
     res = []
     for t in range(len(mariogram)):
         aprox, coof = approximate_with_non_orthogonal_basis_orto(mariogram[:t + 1], [fki[:t + 1] for fki in fk])
-        accuracy = sum(abs(mariogram[:t + 1] - aprox))
+        if aprox is None or coof is None:
+            accuracy = 1000000000
+            coof = [0 for i in range(len(fk))]
+        else:
+            accuracy = sum(abs(mariogram[:t + 1] - aprox))
         res.append([accuracy, coof])
     # fig, ax1 = plt.subplots(1)
     # acc = [res[i][0] for i in range(len(res))]
