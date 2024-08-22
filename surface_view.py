@@ -86,4 +86,4 @@ def show_times(basis_name, experiment_name):
 # "octo", "1_2_4_8_16_32"
 # "quadro", "8_4_0_-4"
 # "quadro", "1_2_4_8"
-show_times("quadro", "1_2_4_8")
+show_times("quadro", "8_4_0_-4")

@@ -1,58 +1,65 @@
+import os
 import numpy as np
-import parsers
 
 
-def gram_schmidt_with_fixed_first_vector(vectors):
-    """Ортогонализация системы векторов методом Грама-Шмидта, фиксируя первый вектор."""
-    orthogonal_basis = [vectors[0].astype(float)]  # Первый вектор остаётся неизменным
-    for v in vectors[1:]:
-        v = v.astype(float)
-        for u in orthogonal_basis:
-            v -= np.dot(v, u) / np.dot(u, u) * u
-        orthogonal_basis.append(v)
-    return orthogonal_basis
+class HeightMap:
+    def __init__(self, file_path, stride=1):
+        self.file_path = file_path
+        self.stride = stride
+        self.map_data = self._load_map_data()
+
+        # Размеры карты
+        self.height = self.map_data.shape[0]
+        self.width = self.map_data.shape[1]
+
+    def _load_map_data(self):
+        """Загружает данные из файла и возвращает их в виде 2D numpy массива."""
+        with open(self.file_path, 'r') as file:
+            data = file.read()
+
+        # Преобразуем текст в 2D массив float значений
+        lines = data.strip().split('\n')
+        map_data = np.array([[float(val) for val in line.split()] for line in lines])
+
+        return map_data
+
+    def get_value(self, x, y):
+        """Возвращает значение карты высот с учетом страйда."""
+        x_index = x * self.stride
+        y_index = y * self.stride
+
+        # Проверка выхода за границы
+        if x_index >= self.width or y_index >= self.height:
+            raise IndexError("Индекс выходит за пределы карты высот.")
+
+        return self.map_data[y_index, x_index]
+
+    def get_subsampled_map(self):
+        """Возвращает 2D массив с учетом страйда."""
+        return self.map_data[::self.stride, ::self.stride]
 
 
-def decompose_vector(vector, basis):
-    """Находит коэффициенты разложения вектора по базису."""
-    coefficients = []
-    for b in basis:
-        coefficient = np.dot(vector, b) / np.dot(b, b)
-        coefficients.append(coefficient)
-    return np.array(coefficients)
+# Пример использования
+def find_wave_file(directory):
+    """Ищет и возвращает путь к файлу с расширением .wave в указанной директории."""
+    for filename in os.listdir(directory):
+        if filename.endswith('.wave'):
+            return os.path.join(directory, filename)
+    raise FileNotFoundError("Файл с расширением .wave не найден.")
 
 
-def find_coefficients_in_original_basis(basis, orthogonal_basis, f_bort):
-    """Находит коэффициенты разложения вектора по исходному базису из ортогонализованного."""
-    # Решаем систему f_b * b = f_bort * bort
-    transition_matrix = np.array([[np.dot(ob, b) for ob in orthogonal_basis] for b in basis])
-    f_b = np.linalg.solve(transition_matrix.T, f_bort * np.array([np.dot(ob, ob) for ob in orthogonal_basis]))
-    return f_b
+# Используем класс HeightMap
+directory_path = 'data/quadro/1'  # Укажите путь к директории
+wave_file = find_wave_file(directory_path)
 
+# Создаём экземпляр класса HeightMap с шагом 2 (например)
+height_map = HeightMap(wave_file, stride=2)
 
-wave_form_to_restore = parsers.WaveFormToRestore("quadro", "8_4_0_-4")
+# Получаем значение на определённых координатах
+value = height_map.get_value(1, 1)
+print(f"Значение на координатах (1, 1) с учётом страйда: {value}")
 
-# Пример данных
-# b = [np.array([1, 1, 0]), np.array([0, 1, 1]), np.array([1, 0, 1])]
-# f = np.array([2, 3, 4])
-pos = "700_800"
-f, b = wave_form_to_restore.mariorgams[pos], [fki[pos] for fki in wave_form_to_restore.fk]
-# 1. Ортогонализация базиса, оставляя первый вектор неизменным
-bort = gram_schmidt_with_fixed_first_vector(b)
-print("Ортогонализованный базис (bort):")
-for vec in bort:
-    print(vec)
-
-# 2. Разложение вектора f по ортогональному базису bort
-f_bort = decompose_vector(f, bort)
-print("\nКоэффициенты разложения в ортогональном базисе (f_bort):", f_bort)
-
-# 3. Найти коэффициенты f_b из равенства f_b * b = f_bort * bort
-f_b = find_coefficients_in_original_basis(b, bort, f_bort)
-print("\nКоэффициенты разложения в исходном базисе (f_b):", f_b)
-
-# Проверка, что f_b * b = f
-reconstructed_f = np.sum([f_b[i] * b[i] for i in range(len(b))], axis=0)
-print("\nВектор, восстановленный из коэффициентов и исходного базиса (reconstructed_f):", reconstructed_f)
-print("\nИсходный вектор (f):", f)
-print("Равенство reconstructed_f и f:", np.sum(reconstructed_f - f))
+# Получаем субдискретизированную карту высот
+subsampled_map = height_map.get_subsampled_map()
+print("Субдискретизированная карта высот:")
+print(subsampled_map)
