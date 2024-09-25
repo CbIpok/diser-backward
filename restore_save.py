@@ -48,10 +48,11 @@ def restore_all_times():
             times = [restore.get_restore_time(wave, f"{pos[0]}_{pos[1]}", threshold) for pos in
                      tqdm(wave.coords, desc=f"process basis {basis} experiment {experiment}")]
             restore_res[basis][experiment] = {"coords": wave.coords, "times": times}
-    output_file = 'data/experiment_dictionary.json'
+    output_file = 'data/experiment_dictionary_non_orto.json'
     # Сохранение словаря в файл JSON
     with open(output_file, 'w') as file:
         json.dump(restore_res, file, indent=4)
 
 
-# restore_all_times()
+if __name__ == "__main__":
+    restore_all_times()

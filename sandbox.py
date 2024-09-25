@@ -1,65 +1,106 @@
-import os
 import numpy as np
 
 
-class HeightMap:
-    def __init__(self, file_path, stride=1):
-        self.file_path = file_path
-        self.stride = stride
-        self.map_data = self._load_map_data()
+# Функция для ортогонализации системы векторов по методу Грама-Шмидта
+def gram_schmidt(vectors):
+    orthogonal_vectors = []
+    for i in range(len(vectors)):
+        # Проекция текущего вектора на уже ортогонализированные векторы
+        new_vector = vectors[i]
+        if i == 0:
+            orthogonal_vectors.append(new_vector)
+        else:
+            for j in range(i):
+                proj = np.dot(new_vector, orthogonal_vectors[j]) / np.dot(orthogonal_vectors[j],
+                                                                          orthogonal_vectors[j]) * orthogonal_vectors[j]
+                new_vector = new_vector - proj
+            orthogonal_vectors.append(new_vector)
+    return np.array(orthogonal_vectors)
 
-        # Размеры карты
-        self.height = self.map_data.shape[0]
-        self.width = self.map_data.shape[1]
 
-    def _load_map_data(self):
-        """Загружает данные из файла и возвращает их в виде 2D numpy массива."""
-        with open(self.file_path, 'r') as file:
-            data = file.read()
+# Функция для разложения вектора по ортогональному базису
+def decompose_vector(v, orthogonal_basis):
+    coefficients = []
+    for u in orthogonal_basis:
+        # Обработка возможного деления на ноль (в случае линейной зависимости)
+        try:
+            coefficient = np.dot(v, u) / np.dot(u, u)
+        except ZeroDivisionError:
+            coefficient = 0
+        coefficients.append(coefficient)
+    return np.array(coefficients)
 
-        # Преобразуем текст в 2D массив float значений
-        lines = data.strip().split('\n')
-        map_data = np.array([[float(val) for val in line.split()] for line in lines])
 
-        return map_data
+# Вычисление l_k_i для конкретных индексов k и i
+def compute_l_k_i(f_k_i, e_i):
+    dot_product_fk_ei = np.dot(f_k_i, e_i)
+    dot_product_ei_ei = np.dot(e_i, e_i)
 
-    def get_value(self, x, y):
-        """Возвращает значение карты высот с учетом страйда."""
-        x_index = x * self.stride
-        y_index = y * self.stride
+    # Проверка на деление на ноль
+    if dot_product_ei_ei == 0:
+        return 0
+    else:
+        return -dot_product_fk_ei / dot_product_ei_ei
 
-        # Проверка выхода за границы
-        if x_index >= self.width or y_index >= self.height:
-            raise IndexError("Индекс выходит за пределы карты высот.")
 
-        return self.map_data[y_index, x_index]
+# Функция для вычисления F(j, i)
+def F(j, i, l):
+    if j == i:
+        return 0
+    elif j == i + 1:
+        return l[j, i]
+    else:
+        sum_part = sum(l[j, k] * F(k, i, l) for k in range(i + 1, j))
+        return l[j, i] + sum_part
 
-    def get_subsampled_map(self):
-        """Возвращает 2D массив с учетом страйда."""
-        return self.map_data[::self.stride, ::self.stride]
+
+# Вычисление bi
+def compute_bi(k, a_k, l):
+    b = np.zeros_like(a_k)
+
+    # По формулам из задачи
+    b[k] = a_k[k]
+    b[k - 1] = a_k[k - 1] + a_k[k] * F(k, k - 1, l)
+    b[k - 2] = a_k[k - 2] + a_k[k - 1] * F(k - 1, k - 2, l) + a_k[k] * F(k, k - 2, l)
+
+    for i in range(k - 3, -1, -1):
+        sum_part = sum(a_k[j] * F(j, i, l) for j in range(i + 1, k + 1))
+        b[i] = a_k[i] + sum_part
+
+    return b
+
+
+# Основная функция для аппроксимации вектора x в базисе fk
+def approximate_vector(x, f_k):
+    try:
+        # Ортогонализация базиса
+        e_i = gram_schmidt(f_k)
+
+        # Разложение вектора x по ортогональному базису
+        a_k = decompose_vector(x, e_i)
+
+        # Вычисление l_k_i
+        l_k_i = np.zeros((len(f_k), len(e_i)))
+        for k in range(len(f_k)):
+            for i in range(len(e_i)):
+                l_k_i[k, i] = compute_l_k_i(f_k[k], e_i[i])
+
+        # Вычисление b_i
+        k = len(a_k) - 1
+        b = compute_bi(k, a_k, l_k_i)
+        return b
+
+    except Exception as e:
+        # В случае исключения (например, линейной зависимости) возвращаем нулевые коэффициенты
+        print("Ошибка при аппроксимации, возвращены нулевые коэффициенты:", e)
+        return np.zeros(len(x))
 
 
 # Пример использования
-def find_wave_file(directory):
-    """Ищет и возвращает путь к файлу с расширением .wave в указанной директории."""
-    for filename in os.listdir(directory):
-        if filename.endswith('.wave'):
-            return os.path.join(directory, filename)
-    raise FileNotFoundError("Файл с расширением .wave не найден.")
+x = [1, 2, 3, 4]
+f_k = np.array([[1, 0, 0, 0], [1, 1, 0, 0], [1, 1, 1, 0], [1, 1, 1, 1]])  # базис fk
 
-
-# Используем класс HeightMap
-directory_path = 'data/quadro/1'  # Укажите путь к директории
-wave_file = find_wave_file(directory_path)
-
-# Создаём экземпляр класса HeightMap с шагом 2 (например)
-height_map = HeightMap(wave_file, stride=2)
-
-# Получаем значение на определённых координатах
-value = height_map.get_value(1, 1)
-print(f"Значение на координатах (1, 1) с учётом страйда: {value}")
-
-# Получаем субдискретизированную карту высот
-subsampled_map = height_map.get_subsampled_map()
-print("Субдискретизированная карта высот:")
-print(subsampled_map)
+# Выводим аппроксимированные коэффициенты bi
+b = approximate_vector(x, f_k)
+print("Коэффициенты bi:", b)
+print("Сумма аппроксимированных векторов:", sum([b[i] * f_k[i] for i in range(len(b))]))
